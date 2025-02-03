@@ -1,0 +1,93 @@
+***DATA 505 HW #2***
+**Kayle Megginson Febuary 2nd 2025**
+
+
+**Abstract:**
+
+This is a technical blog post of **both** an HTML file *and* [.qmd file](src/wine_features.qmd) hosted on GitHub pages.
+
+# Setup
+
+
+**Step Up Code:**
+```{r, warning = F}
+library(tidyverse)
+library(caret)
+library(fastDummies)
+wine <- readRDS(gzcon(url("https://github.com/cd-public/D505/raw/master/dat/wine.rds")))
+```
+
+**Explanataion:**
+Line 1: `library(tidyverse)`: Loads the Tidyverse, a collection of R packages for data manipulation and visualization.  
+Line 2: `library(caret)`: Loads the Caret package for machine learning tasks.  
+Line 3: `library(fastDummies)`: Loads the fastDummies package to create dummy variables efficiently.  
+Line 4: `wine <- readRDS(...)`: Reads in the `wine.rds` dataset from a remote GitHub repository.  
+
+
+# Feature Engineering
+
+We begin by engineering an number of features.
+
+1. Create a total of 10 features (including points). 
+2. Remove all rows with a missing value. 
+3. Ensure only log(price) and engineering features are the only columns that remain in the `wino` dataframe.
+
+```{r}
+wino <- wine %>% 
+  mutate(
+    lprice = log(price),
+    vintage = year,
+    is_us_wine = ifelse(country == "US", 1, 0),
+    name_length = nchar(title),
+    description_length = nchar(description),
+    region_count = (!is.na(region_1)) + (!is.na(region_2)),
+    has_designation = ifelse(!is.na(designation), 1, 0),
+    has_taster = ifelse(!is.na(taster_name), 1, 0),
+    price_per_point = price / (points + 1),
+    province_count = as.integer(as.factor(province))
+  ) %>% 
+  select(lprice, points, vintage, is_us_wine, name_length, description_length, 
+         region_count, has_designation, has_taster, price_per_point, province_count) %>% 
+  drop_na()
+```
+
+# Caret
+
+We now use a train/test split to evaluate the features.
+
+1. Use the Caret library to partition the wino dataframe into an 80/20 split. 
+2. Run a linear regression with bootstrap resampling. 
+3. Report RMSE on the test partition of the data.
+
+```{r, warning = F}
+# Partition data into 80% training and 20% testing
+set.seed(42)
+train_index <- createDataPartition(wino$lprice, p = 0.8, list = FALSE)
+train_data <- wino[train_index, ]
+test_data <- wino[-train_index, ]
+
+# Train a linear regression model
+fit_control <- trainControl(method = "boot", number = 50)
+model <- train(lprice ~ ., data = train_data, method = "lm", trControl = fit_control)
+
+# Predict on test data and calculate RMSE
+predictions <- predict(model, test_data)
+rmse_value <- RMSE(predictions, test_data$lprice)
+
+rmse_value
+```
+We recieve an output of 0.3892879 as our RMSE value
+
+
+# Variable selection
+
+We now graph the importance of your 10 features.
+
+```{r}
+# Extract feature importance
+importance <- varImp(model)
+
+# Plot feature importance
+ggplot(importance) +
+  ggtitle("Feature Importance in Predicting Log(Price)")
+```
